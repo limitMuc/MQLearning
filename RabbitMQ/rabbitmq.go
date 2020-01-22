@@ -64,15 +64,15 @@ func (r *RabbitMQ) PublishSimple(message string) {
 	_, err := r.channel.QueueDeclare(
 		r.QueueName,
 		//是否持久化(当重启后所有数据都会消失，不会持久化保存)
-		false,
+		false,		// durable
 		//是否自动删除(当最后一个消费者断开连接后，是否会将消息从队列中删除)
-		false,
+		false,		// autoDelete
 		//是否具有排他性(如果为true，其它消费者就不能访问，只有它自身创建的自身可见)
-		false,
+		false,		// exclusive
 		//是否阻塞处理(发送消息以后，是否等待服务器响应)
-		false,
+		false,		// noWait
 		//额外的属性
-		nil,
+		nil,			// args
 	)
 	if err != nil {
 		fmt.Println(err)
@@ -82,9 +82,9 @@ func (r *RabbitMQ) PublishSimple(message string) {
 		r.Exchange,
 		r.QueueName,
 		//如果为true，根据自身exchange类型和routekey规则,如果无法找到符合条件的队列会把消息返还给发送者
-		false,
+		false,		// mandatory
 		//如果为true，当exchange发送消息到队列后发现队列上没有绑定消费者，则会把消息返还给发送者
-		false,
+		false,		// immediate
 		amqp.Publishing{
 			ContentType: "text/plain",
 			Body:        []byte(message),		// 将发送的消息转成字节数组
@@ -123,8 +123,8 @@ func (r *RabbitMQ) ConsumeSimple() {
 		//如果设置为true，表示 不能将同一个Conenction中生产者发送的消息传递给这个Connection中 的消费者
 		false,  // noLocal
 		//队列是否阻塞
-		false,  // noWait
-		nil,    // args
+		false,  	// noWait
+		nil,    	// args
 	)
 	if err != nil {
 		fmt.Println(err)
@@ -141,5 +141,108 @@ func (r *RabbitMQ) ConsumeSimple() {
 	}()
 
 	log.Printf("[RabbitMQ] Waiting for messages. To exit press CTRL+C")
+	<-forever
+}
+
+
+//订阅模式创建RabbitMQ实例
+func NewRabbitMQPubSub(exchangeName string) *RabbitMQ {
+	//创建RabbitMQ实例
+	rabbitmq := NewRabbitMQ("",exchangeName,"")
+	var err error
+	//获取connection
+	rabbitmq.conn, err = amqp.Dial(rabbitmq.Mqurl)
+	rabbitmq.failOnErr(err,"[RabbitMQ] failed to connect rabbitmq!")
+	//获取channel
+	rabbitmq.channel, err = rabbitmq.conn.Channel()
+	rabbitmq.failOnErr(err, "[RabbitMQ] failed to open a channel")
+	return rabbitmq
+}
+
+//订阅模式生产者
+func (r *RabbitMQ) PublishPub(message string) {
+	//1.尝试创建交换机
+	err := r.channel.ExchangeDeclare(
+		r.Exchange,
+		// 交换机类型，订阅模式下要将类型设置为fanout广播类型
+		"fanout",		// kind
+		true,		// durable
+		false,		// autoDelete
+		//如果true, 表示这个exchange不可以被client用来推送消息，仅用来进行exchange和exchange之间的绑定
+		false,		// internal
+		false,		// noWait
+		nil,			// args
+	)
+
+	r.failOnErr(err, "[RabbitMQ] Failed to declare an exchange")
+
+	//2.发送消息
+	err = r.channel.Publish(
+		r.Exchange,
+		"",				// key
+		false,		// mandatory
+		false,		// immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        []byte(message),
+		})
+}
+
+//订阅模式消费者
+func (r *RabbitMQ) RecieveSub() {
+	//1.试探性创建交换机
+	err := r.channel.ExchangeDeclare(
+		r.Exchange,
+		//交换机类型
+		"fanout",		// kind
+		true,		// durable
+		false,		// autoDelte
+		//如果true, 表示这个exchange不可以被client用来推送消息，仅用来进行exchange和exchange之间的绑定
+		false,		// internal
+		false,		//noWait
+		nil,			// args
+	)
+	r.failOnErr(err, "[RabbitMQ] Failed to declare an exchange")
+	//2.试探性创建队列，这里注意队列名称不要写
+	q, err := r.channel.QueueDeclare(
+		"",		 //留空让其随机生产队列名称
+		false,		// durable
+		false,		// autoDelete
+		true,		// exclusive
+		false,		// noWait
+		nil,			// args
+	)
+	r.failOnErr(err, "[RabbitMQ] Failed to declare a queue")
+
+	//绑定队列到 exchange 中
+	err = r.channel.QueueBind(
+		q.Name,
+		//在pub/sub模式下，这里的key必须要为空
+		"",		// key
+		r.Exchange,
+		false,		// noWait
+		nil,
+		)			// args
+
+	//消费消息
+	messges, err := r.channel.Consume(
+		q.Name,
+		"",		// consumer
+		true,		// autoAck
+		false,		// exclusive
+		false,		// noLocal
+		false,		// noWait
+		nil,			// args
+	)
+
+	forever := make(chan bool)
+
+	go func() {
+		for d := range messges {
+			log.Printf("[RabbitMQ] Received a message: %s", d.Body)
+		}
+	}()
+
+	fmt.Println("[RabbitMQ] Waiting for messages. To exit press CTRL+C")
 	<-forever
 }
