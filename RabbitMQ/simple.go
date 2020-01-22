@@ -1,4 +1,4 @@
-package simple
+package RabbitMQ
 
 import (
 	"fmt"
@@ -38,8 +38,8 @@ func (r *RabbitMQ) Destory() {
 //错误处理函数
 func (r *RabbitMQ) failOnErr(err error, message string) {
 	if err != nil {
-		log.Fatalf("[RabbitMQ-Simple] %s:%s", message, err)
-		panic(fmt.Sprintf("[RabbitMQ-Simple] %s:%s", message, err))
+		log.Fatalf("[RabbitMQ] %s:%s", message, err)
+		panic(fmt.Sprintf("[RabbitMQ] %s:%s", message, err))
 	}
 }
 
@@ -50,11 +50,11 @@ func NewRabbitMQSimple(queueName string) *RabbitMQ {
 	var err error
 	//获取connection
 	rabbitmq.conn, err = amqp.Dial(rabbitmq.Mqurl)
-	rabbitmq.failOnErr(err, "[RabbitMQ-Simple] failed to connect rabb"+
+	rabbitmq.failOnErr(err, "[RabbitMQ] failed to connect rabb"+
 		"itmq!")
 	//获取channel
 	rabbitmq.channel, err = rabbitmq.conn.Channel()
-	rabbitmq.failOnErr(err, "[RabbitMQ-Simple] failed to open a channel")
+	rabbitmq.failOnErr(err, "[RabbitMQ] failed to open a channel")
 	return rabbitmq
 }
 
@@ -135,11 +135,11 @@ func (r *RabbitMQ) ConsumeSimple() {
 	go func() {
 		for d := range msgs {
 			//消息逻辑处理，可以自行设计逻辑
-			log.Printf("[RabbitMQ-Simple] Received a message: %s", d.Body)
+			log.Printf("[RabbitMQ] Received a message: %s", d.Body)
 
 		}
 	}()
 
-	log.Printf("[RabbitMQ-Simple] Waiting for messages. To exit press CTRL+C")
+	log.Printf("[RabbitMQ] Waiting for messages. To exit press CTRL+C")
 	<-forever
 }
