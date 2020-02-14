@@ -45,7 +45,7 @@ func (r *RabbitMQ) failOnErr(err error, message string) {
 
 //创建简单模式下RabbitMQ实例
 func NewRabbitMQSimple(queueName string) *RabbitMQ {
-	//创建RabbitMQ实例
+	//创建RabbitMQ实例,在 RabbitMQ 中，消息是不能直接发送到队列，它需要发送到交换机（exchange）中，它可以使用一个空字符串来标识。交换机允许我们指定某条消息需要投递到哪个队列。
 	rabbitmq := NewRabbitMQ(queueName,"","")
 	var err error
 	//获取connection
@@ -60,7 +60,7 @@ func NewRabbitMQSimple(queueName string) *RabbitMQ {
 
 //简单模式下生产者
 func (r *RabbitMQ) PublishSimple(message string) {
-	//1.申请队列，如果队列不存在会自动创建，存在则跳过创建,保证队列存在，消息能发送到队列中
+	//1.申请队列，如果队列不存在会自动创建，存在则跳过创建,保证队列存在，消息能发送到队列中, 如果我们把消息发送到一个不存在的队列，RabbitMQ 会丢弃这条消息
 	_, err := r.channel.QueueDeclare(
 		r.QueueName,
 		//是否持久化(当重启后所有数据都会消失，不会持久化保存)
@@ -94,6 +94,7 @@ func (r *RabbitMQ) PublishSimple(message string) {
 //simple 模式下消费者
 func (r *RabbitMQ) ConsumeSimple() {
 	//1.申请队列，如果队列不存在会自动创建，存在则跳过创建
+	// 为什么要重复声明队列呢 —— 我们已经在前面的代码中声明过它了。如果我们确定了队列是已经存在的，那么我们可以不这么做，可是我们并不确定哪个程序会首先运行。这种情况下，在程序中重复将队列重复声明一下是种值得推荐的做法.
 	q, err := r.channel.QueueDeclare(
 		r.QueueName,
 		//是否持久化
